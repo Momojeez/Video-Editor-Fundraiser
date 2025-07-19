@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -40,41 +39,6 @@
         .header p {
             font-size: 1.2rem;
             opacity: 0.9;
-        }
-
-        .coin-balance {
-            background: rgba(255, 255, 255, 0.9);
-            color: #4f46e5;
-            padding: 15px 30px;
-            border-radius: 50px;
-            font-size: 1.5rem;
-            font-weight: bold;
-            margin: 20px auto;
-            max-width: 300px;
-            text-align: center;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-        }
-
-        .admin-controls {
-            position: fixed;
-            top: 10px;
-            right: 10px;
-            z-index: 1001;
-        }
-
-        .reset-btn {
-            background: #ef4444;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 5px;
-            font-size: 0.9rem;
-            cursor: pointer;
-            margin-left: 10px;
-        }
-
-        .reset-btn:hover {
-            background: #dc2626;
         }
 
         .main-content {
@@ -425,17 +389,10 @@
 <body>
     <div class="connection-status" id="connectionStatus">🔌 Connecting...</div>
     
-    <div class="admin-controls">
-        <button class="reset-btn" id="resetDataBtn">🗑️ Reset Data</button>
-    </div>
-    
     <div class="container">
         <div class="header">
             <h1>🎬 Video Editor Fundraiser</h1>
             <p>Help us reach our goal and unlock amazing rewards!</p>
-            <div class="coin-balance">
-                💰 Your Coins: <span id="userCoinBalance">0</span>
-            </div>
         </div>
 
         <div class="main-content">
@@ -516,7 +473,7 @@
     <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-        import { getDatabase, ref, push, set, get, onValue, serverTimestamp, off, remove } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+        import { getDatabase, ref, push, set, get, onValue, serverTimestamp, off } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
 
         // Firebase configuration
         const firebaseConfig = {
@@ -545,15 +502,14 @@
                 this.userId = this.generateUserId();
                 this.isConnected = false;
                 this.listeners = [];
-                this.userCoinBalance = 0;
 
                 this.initializeElements();
                 this.bindEvents();
                 this.initializeFirebase();
-                this.loadUserBalance();
             }
 
             generateUserId() {
+                // Generate or retrieve user ID from localStorage
                 let userId = localStorage.getItem('fundraiser_user_id');
                 if (!userId) {
                     userId = 'user_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
@@ -579,9 +535,7 @@
                     donorName: document.getElementById('donorName'),
                     customAmount: document.getElementById('customAmount'),
                     connectionStatus: document.getElementById('connectionStatus'),
-                    errorMessage: document.getElementById('errorMessage'),
-                    userCoinBalance: document.getElementById('userCoinBalance'),
-                    resetDataBtn: document.getElementById('resetDataBtn')
+                    errorMessage: document.getElementById('errorMessage')
                 };
             }
 
@@ -608,71 +562,19 @@
                 // Daily reward button
                 this.elements.dailyRewardBtn.addEventListener('click', () => this.claimDailyReward());
 
-                // Reset data button
-                this.elements.resetDataBtn.addEventListener('click', () => this.resetAllData());
-
                 // Check daily reward timer
                 this.updateRewardTimer();
                 setInterval(() => this.updateRewardTimer(), 1000);
-            }
-
-            loadUserBalance() {
-                const balance = localStorage.getItem('userCoinBalance');
-                this.userCoinBalance = balance ? parseInt(balance) : 50000; // Start with 50,000 coins
-                this.saveUserBalance();
-                this.updateCoinBalanceDisplay();
-            }
-
-            saveUserBalance() {
-                localStorage.setItem('userCoinBalance', this.userCoinBalance.toString());
-            }
-
-            updateCoinBalanceDisplay() {
-                this.elements.userCoinBalance.textContent = this.formatNumber(this.userCoinBalance);
-            }
-
-            async resetAllData() {
-                if (!confirm('Are you sure you want to reset all data? This action cannot be undone.')) {
-                    return;
-                }
-
-                try {
-                    this.showConnectionStatus('connecting');
-                    
-                    // Reset Firebase data
-                    await set(ref(db, 'stats'), {
-                        totalCoins: 0,
-                        totalDonations: 0,
-                        doomActivations: 0,
-                        currentGoal: 1000000
-                    });
-
-                    // Clear donations
-                    await remove(ref(db, 'donations'));
-
-                    // Clear daily rewards
-                    await remove(ref(db, 'dailyRewards'));
-
-                    // Reset local storage
-                    localStorage.removeItem('lastRewardTime');
-                    this.userCoinBalance = 50000; // Reset to starting amount
-                    this.saveUserBalance();
-
-                    this.showNotification('All data has been reset successfully!', false);
-                    this.showConnectionStatus('online');
-                    
-                } catch (error) {
-                    console.error('Reset error:', error);
-                    this.showError('Failed to reset data. Please try again.');
-                    this.showConnectionStatus('offline');
-                }
             }
 
             async initializeFirebase() {
                 try {
                     this.showConnectionStatus('connecting');
                     
+                    // Initialize database structure if needed
                     await this.initializeDatabaseStructure();
+                    
+                    // Set up real-time listeners
                     this.setupRealtimeListeners();
                     
                     this.showConnectionStatus('online');
@@ -691,6 +593,7 @@
                 const snapshot = await get(statsRef);
                 
                 if (!snapshot.exists()) {
+                    // Initialize with default values
                     await set(ref(db, 'stats'), {
                         totalCoins: 0,
                         totalDonations: 0,
@@ -701,6 +604,7 @@
             }
 
             setupRealtimeListeners() {
+                // Listen to stats changes
                 const statsRef = ref(db, 'stats');
                 const statsListener = onValue(statsRef, (snapshot) => {
                     if (snapshot.exists()) {
@@ -715,6 +619,7 @@
                     this.showError('Failed to sync statistics');
                 });
 
+                // Listen to donations changes
                 const donationsRef = ref(db, 'donations');
                 const donationsListener = onValue(donationsRef, (snapshot) => {
                     if (snapshot.exists()) {
@@ -732,6 +637,7 @@
                     this.showError('Failed to sync donations');
                 });
 
+                // Listen to daily rewards
                 const rewardsRef = ref(db, `dailyRewards/${this.userId}`);
                 const rewardsListener = onValue(rewardsRef, (snapshot) => {
                     if (snapshot.exists()) {
@@ -742,17 +648,13 @@
                     console.error('Daily rewards listener error:', error);
                 });
 
+                // Store listeners for cleanup
                 this.listeners = [statsListener, donationsListener, rewardsListener];
             }
 
             async makeDonation() {
                 if (this.selectedAmount <= 0) {
                     this.showNotification('Please select or enter a donation amount!', false);
-                    return;
-                }
-
-                if (this.selectedAmount > this.userCoinBalance) {
-                    this.showNotification('Not enough coins! You need more coins to make this donation.', false);
                     return;
                 }
 
@@ -768,6 +670,7 @@
                     const donorName = this.elements.donorName.value.trim() || 'Anonymous';
                     const timestamp = Date.now();
 
+                    // Create donation object
                     const donation = {
                         amount: this.selectedAmount,
                         donor: donorName,
@@ -775,24 +678,25 @@
                         userId: this.userId
                     };
 
+                    // Add donation to Firebase
                     const donationsRef = ref(db, 'donations');
                     await push(donationsRef, donation);
 
+                    // Update statistics
                     await this.updateStats(this.selectedAmount);
 
-                    // Deduct coins from user balance
-                    this.userCoinBalance -= this.selectedAmount;
-                    this.saveUserBalance();
-                    this.updateCoinBalanceDisplay();
-
+                    // Check for doom activation
                     if (this.selectedAmount >= 100000) {
                         await this.activateDoom();
                     }
 
+                    // Check for goal completion
                     this.checkGoalCompletion();
 
+                    // Show success notification
                     this.showNotification(`Thank you ${donorName} for donating ${this.formatNumber(this.selectedAmount)} coins!`, false);
 
+                    // Reset form
                     this.resetDonationForm();
 
                 } catch (error) {
@@ -856,19 +760,30 @@
                 this.elements.dailyRewardBtn.textContent = 'Claiming...';
 
                 try {
+                    // Add reward as a donation
+                    const donation = {
+                        amount: 5000,
+                        donor: 'Daily Reward System',
+                        timestamp: now,
+                        userId: 'system_daily_reward',
+                        isReward: true
+                    };
+
+                    const donationsRef = ref(db, 'donations');
+                    await push(donationsRef, donation);
+
+                    // Update stats
+                    await this.updateStats(5000);
+
+                    // Record reward claim
                     const rewardRef = ref(db, `dailyRewards/${this.userId}`);
                     await set(rewardRef, {
                         lastClaimed: now,
                         totalClaimed: (await get(rewardRef)).val()?.totalClaimed + 1 || 1
                     });
 
-                    // Add coins to user balance instead of the fundraiser
-                    this.userCoinBalance += 5000;
-                    this.saveUserBalance();
-                    this.updateCoinBalanceDisplay();
-
                     localStorage.setItem('lastRewardTime', now.toString());
-                    this.showNotification('🎁 Daily reward claimed! +5,000 coins added to your balance!', false);
+                    this.showNotification('🎁 Daily reward claimed! +5,000 coins added to the fundraiser!', false);
 
                 } catch (error) {
                     console.error('Daily reward error:', error);
@@ -887,12 +802,14 @@
                 this.elements.doomCount.textContent = this.doomActivations;
                 this.elements.goalAmount.textContent = this.formatNumber(this.currentGoal);
 
+                // Update progress bar
                 const progress = Math.min((this.totalCoins / this.currentGoal) * 100, 100);
                 this.elements.progressFill.style.width = `${progress}%`;
                 this.elements.progressText.textContent = `${Math.round(progress)}%`;
             }
 
             updateTopDonators() {
+                // Aggregate donations by donor name
                 const donatorTotals = {};
                 this.donations.forEach(donation => {
                     if (!donation.isReward) {
@@ -901,11 +818,13 @@
                     }
                 });
 
+                // Convert to array and sort
                 this.topDonators = Object.entries(donatorTotals)
                     .map(([name, amount]) => ({ name, amount }))
                     .sort((a, b) => b.amount - a.amount)
                     .slice(0, 10);
 
+                // Update display
                 if (this.topDonators.length === 0) {
                     this.elements.topDonatorsList.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">No donations yet!</div>';
                 } else {
@@ -926,15 +845,17 @@
                     return;
                 }
 
+                // Show last 20 donations
                 const recentDonations = this.donations.slice(0, 20);
                 this.elements.activityList.innerHTML = recentDonations
                     .map(donation => {
                         const isDoom = donation.amount >= 100000;
                         const timeAgo = this.getTimeAgo(donation.timestamp);
+                        const isReward = donation.isReward;
                         
                         return `
                             <div class="activity-item ${isDoom ? 'doom-activation' : ''}">
-                                <div class="activity-donor">${donation.donor}</div>
+                                <div class="activity-donor">${isReward ? '🎁 ' : ''}${donation.donor}</div>
                                 <div class="activity-amount">+${this.formatNumber(donation.amount)} coins</div>
                                 <div class="activity-time">${timeAgo}</div>
                                 ${isDoom ? '<div style="font-weight: bold; color: #fff;">💀 DOOM ACTIVATED! 💀</div>' : ''}
@@ -947,6 +868,7 @@
                 if (this.totalCoins >= this.currentGoal) {
                     this.showNotification(`🎉 Goal Reached! ${this.formatNumber(this.currentGoal)} coins collected!`, false);
                     
+                    // Increase goal
                     this.currentGoal += 1000000;
                     const statsRef = ref(db, 'stats/currentGoal');
                     set(statsRef, this.currentGoal).catch(error => {
@@ -1048,6 +970,7 @@
             }
 
             destroy() {
+                // Clean up listeners
                 this.listeners.forEach(listener => {
                     if (typeof listener === 'function') {
                         off(listener);
@@ -1056,10 +979,12 @@
             }
         }
 
+        // Initialize app when DOM is loaded
         document.addEventListener('DOMContentLoaded', () => {
             window.fundraiserApp = new FundraiserApp();
         });
 
+        // Handle page unload
         window.addEventListener('beforeunload', () => {
             if (window.fundraiserApp) {
                 window.fundraiserApp.destroy();
