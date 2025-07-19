@@ -41,6 +41,33 @@
             opacity: 0.9;
         }
 
+        .user-coins-display {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 25px;
+            padding: 10px 20px;
+            margin: 20px auto 0;
+            display: inline-block;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .coins-icon {
+            font-size: 1.2rem;
+            margin-right: 8px;
+        }
+
+        .coins-text {
+            font-size: 1.1rem;
+            font-weight: 500;
+        }
+
+        .coins-amount {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #ffd700;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+
         .main-content {
             display: grid;
             grid-template-columns: 2fr 1fr;
@@ -384,11 +411,6 @@
             margin: 10px 0;
             display: none;
         }
-
-        /* Ensure no reset button styles exist */
-        .reset-btn, .reset-data-btn, .admin-reset {
-            display: none !important;
-        }
     </style>
 </head>
 <body>
@@ -398,6 +420,11 @@
         <div class="header">
             <h1>🎬 Video Editor Fundraiser</h1>
             <p>Help us reach our goal and unlock amazing rewards!</p>
+            <div class="user-coins-display">
+                <span class="coins-icon">🪙</span>
+                <span class="coins-text">Your Coins: </span>
+                <span class="coins-amount" id="userCoinsAmount">0</span>
+            </div>
         </div>
 
         <div class="main-content">
@@ -505,6 +532,7 @@
                 this.selectedAmount = 0;
                 this.doomActivations = 0;
                 this.userId = this.generateUserId();
+                this.userCoins = 0;
                 this.isConnected = false;
                 this.listeners = [];
 
@@ -540,7 +568,8 @@
                     donorName: document.getElementById('donorName'),
                     customAmount: document.getElementById('customAmount'),
                     connectionStatus: document.getElementById('connectionStatus'),
-                    errorMessage: document.getElementById('errorMessage')
+                    errorMessage: document.getElementById('errorMessage'),
+                    userCoinsAmount: document.getElementById('userCoinsAmount')
                 };
             }
 
@@ -653,8 +682,22 @@
                     console.error('Daily rewards listener error:', error);
                 });
 
+                // Listen to user coins
+                const userCoinsRef = ref(db, `userCoins/${this.userId}`);
+                const userCoinsListener = onValue(userCoinsRef, (snapshot) => {
+                    if (snapshot.exists()) {
+                        this.userCoins = snapshot.val().amount || 0;
+                        this.updateUserCoinsDisplay();
+                    } else {
+                        this.userCoins = 0;
+                        this.updateUserCoinsDisplay();
+                    }
+                }, (error) => {
+                    console.error('User coins listener error:', error);
+                });
+
                 // Store listeners for cleanup
-                this.listeners = [statsListener, donationsListener, rewardsListener];
+                this.listeners = [statsListener, donationsListener, rewardsListener, userCoinsListener];
             }
 
             async makeDonation() {
@@ -746,6 +789,25 @@
                 }
             }
 
+            async addUserCoins(amount) {
+                try {
+                    const userCoinsRef = ref(db, `userCoins/${this.userId}`);
+                    const snapshot = await get(userCoinsRef);
+                    const currentAmount = snapshot.exists() ? snapshot.val().amount || 0 : 0;
+                    
+                    await set(userCoinsRef, {
+                        amount: currentAmount + amount,
+                        lastUpdated: Date.now()
+                    });
+                } catch (error) {
+                    console.error('Error adding user coins:', error);
+                }
+            }
+
+            updateUserCoinsDisplay() {
+                this.elements.userCoinsAmount.textContent = this.formatNumber(this.userCoins);
+            }
+
             async claimDailyReward() {
                 const lastRewardTime = localStorage.getItem('lastRewardTime');
                 const now = Date.now();
@@ -787,8 +849,11 @@
                         totalClaimed: (await get(rewardRef)).val()?.totalClaimed + 1 || 1
                     });
 
+                    // Add coins to user balance
+                    await this.addUserCoins(1000);
+
                     localStorage.setItem('lastRewardTime', now.toString());
-                    this.showNotification('🎁 Daily reward claimed! +5,000 coins added to the fundraiser!', false);
+                    this.showNotification('🎁 Daily reward claimed! +5,000 coins added to fundraiser and +1,000 coins to your balance!', false);
 
                 } catch (error) {
                     console.error('Daily reward error:', error);
