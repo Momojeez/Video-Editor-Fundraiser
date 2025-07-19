@@ -354,9 +354,42 @@
             font-weight: bold;
             color: #059669;
         }
+
+        .connection-status {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            z-index: 1000;
+        }
+
+        .connection-status.online {
+            background: #10b981;
+            color: white;
+        }
+
+        .connection-status.offline {
+            background: #ef4444;
+            color: white;
+        }
+
+        .error-message {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            display: none;
+        }
     </style>
 </head>
 <body>
+    <div class="connection-status" id="connectionStatus">🔌 Connecting...</div>
+    
     <div class="container">
         <div class="header">
             <h1>🎬 Video Editor Fundraiser</h1>
@@ -365,6 +398,8 @@
 
         <div class="main-content">
             <div class="progress-section">
+                <div class="error-message" id="errorMessage"></div>
+                
                 <div class="goal-display">
                     <div class="goal-amount" id="goalAmount">1,000,000</div>
                     <div class="goal-label">Current Goal (Coins)</div>
@@ -436,310 +471,462 @@
         </div>
     </div>
 
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+    
     <script>
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyAA9cKZi1r4W4ycxWj2OsvDaFmBKMQqCds",
+            authDomain: "videoeditorfundraiser.firebaseapp.com",
+            databaseURL: "https://videoeditorfundraiser-default-rtdb.firebaseio.com",
+            projectId: "videoeditorfundraiser",
+            storageBucket: "videoeditorfundraiser.firebasestorage.app",
+            messagingSenderId: "470003540715",
+            appId: "1:470003540715:web:75b8f2e66d5d7a93c294ae",
+            measurementId: "G-4DDKZCPFL5"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
         class FundraiserApp {
             constructor() {
                 this.totalCoins = 0;
                 this.donations = [];
                 this.topDonators = [];
-                this.currentGoal = 1000000; // Start at 1M
+                this.currentGoal = 1000000;
                 this.selectedAmount = 0;
-                this.lastRewardTime = localStorage.getItem('lastRewardTime');
                 this.doomActivations = 0;
+                this.userId = this.generateUserId();
+                this.isConnected = false;
+                this.listeners = [];
 
                 this.initializeElements();
                 this.bindEvents();
-                this.loadData();
-                this.updateDisplay();
-                this.startRewardTimer();
-                this.requestNotificationPermission();
+                this.initializeFirebase();
+            }
+
+            generateUserId() {
+                let userId = localStorage.getItem('fundraiser_user_id');
+                if (!userId) {
+                    userId = 'user_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+                    localStorage.setItem('fundraiser_user_id', userId);
+                }
+                return userId;
             }
 
             initializeElements() {
-                this.goalAmountEl = document.getElementById('goalAmount');
-                this.progressFillEl = document.getElementById('progressFill');
-                this.progressTextEl = document.getElementById('progressText');
-                this.totalCoinsEl = document.getElementById('totalCoins');
-                this.totalDonatorsEl = document.getElementById('totalDonators');
-                this.avgDonationEl = document.getElementById('avgDonation');
-                this.doomCountEl = document.getElementById('doomCount');
-                this.customAmountEl = document.getElementById('customAmount');
-                this.donorNameEl = document.getElementById('donorName');
-                this.donateBtnEl = document.getElementById('donateBtn');
-                this.dailyRewardBtnEl = document.getElementById('dailyRewardBtn');
-                this.rewardTimerEl = document.getElementById('rewardTimer');
-                this.topDonatorsListEl = document.getElementById('topDonatorsList');
-                this.activityListEl = document.getElementById('activityList');
+                this.elements = {
+                    goalAmount: document.getElementById('goalAmount'),
+                    progressFill: document.getElementById('progressFill'),
+                    progressText: document.getElementById('progressText'),
+                    totalCoins: document.getElementById('totalCoins'),
+                    totalDonators: document.getElementById('totalDonators'),
+                    avgDonation: document.getElementById('avgDonation'),
+                    doomCount: document.getElementById('doomCount'),
+                    topDonatorsList: document.getElementById('topDonatorsList'),
+                    activityList: document.getElementById('activityList'),
+                    donateBtn: document.getElementById('donateBtn'),
+                    dailyRewardBtn: document.getElementById('dailyRewardBtn'),
+                    rewardTimer: document.getElementById('rewardTimer'),
+                    donorName: document.getElementById('donorName'),
+                    customAmount: document.getElementById('customAmount'),
+                    connectionStatus: document.getElementById('connectionStatus'),
+                    errorMessage: document.getElementById('errorMessage')
+                };
             }
 
             bindEvents() {
-                // Quick amount selection
                 document.querySelectorAll('.quick-amount').forEach(btn => {
                     btn.addEventListener('click', () => {
                         document.querySelectorAll('.quick-amount').forEach(b => b.classList.remove('selected'));
                         btn.classList.add('selected');
                         this.selectedAmount = parseInt(btn.dataset.amount);
-                        this.customAmountEl.value = '';
+                        this.elements.customAmount.value = '';
                     });
                 });
 
-                // Custom amount input
-                this.customAmountEl.addEventListener('input', () => {
+                this.elements.customAmount.addEventListener('input', () => {
                     document.querySelectorAll('.quick-amount').forEach(b => b.classList.remove('selected'));
-                    this.selectedAmount = parseInt(this.customAmountEl.value) || 0;
+                    this.selectedAmount = parseInt(this.elements.customAmount.value) || 0;
                 });
 
-                // Donate button
-                this.donateBtnEl.addEventListener('click', () => this.makeDonation());
+                this.elements.donateBtn.addEventListener('click', () => this.makeDonation());
+                this.elements.dailyRewardBtn.addEventListener('click', () => this.claimDailyReward());
 
-                // Daily reward button
-                this.dailyRewardBtnEl.addEventListener('click', () => this.claimDailyReward());
+                this.updateRewardTimer();
+                setInterval(() => this.updateRewardTimer(), 1000);
             }
 
-            async requestNotificationPermission() {
-                if ('Notification' in window && Notification.permission === 'default') {
-                    await Notification.requestPermission();
+            async initializeFirebase() {
+                try {
+                    this.showConnectionStatus('connecting');
+                    
+                    await this.initializeDatabaseStructure();
+                    this.setupRealtimeListeners();
+                    
+                    this.showConnectionStatus('online');
+                    this.isConnected = true;
+                    this.hideError();
+                } catch (error) {
+                    console.error('Firebase initialization error:', error);
+                    this.showConnectionStatus('offline');
+                    this.showError('Failed to connect to database. Some features may not work properly.');
+                    this.isConnected = false;
                 }
             }
 
-            loadData() {
-                const savedData = localStorage.getItem('fundraiserData');
-                if (savedData) {
-                    const data = JSON.parse(savedData);
-                    this.totalCoins = data.totalCoins || 0;
-                    this.donations = data.donations || [];
-                    this.topDonators = data.topDonators || [];
-                    this.doomActivations = data.doomActivations || 0;
-                    this.updateGoal();
+            async initializeDatabaseStructure() {
+                const statsRef = database.ref('stats');
+                const snapshot = await statsRef.once('value');
+                
+                if (!snapshot.exists()) {
+                    await statsRef.set({
+                        totalCoins: 0,
+                        totalDonations: 0,
+                        doomActivations: 0,
+                        currentGoal: 1000000
+                    });
                 }
             }
 
-            saveData() {
-                const data = {
-                    totalCoins: this.totalCoins,
-                    donations: this.donations,
-                    topDonators: this.topDonators,
-                    doomActivations: this.doomActivations
-                };
-                localStorage.setItem('fundraiserData', JSON.stringify(data));
+            setupRealtimeListeners() {
+                const statsRef = database.ref('stats');
+                statsRef.on('value', (snapshot) => {
+                    if (snapshot.exists()) {
+                        const stats = snapshot.val();
+                        this.totalCoins = stats.totalCoins || 0;
+                        this.doomActivations = stats.doomActivations || 0;
+                        this.currentGoal = stats.currentGoal || 1000000;
+                        this.updateStatsDisplay();
+                    }
+                });
+
+                const donationsRef = database.ref('donations');
+                donationsRef.on('value', (snapshot) => {
+                    if (snapshot.exists()) {
+                        const donationsData = snapshot.val();
+                        this.donations = Object.values(donationsData).sort((a, b) => b.timestamp - a.timestamp);
+                        this.updateTopDonators();
+                        this.updateActivityFeed();
+                    } else {
+                        this.donations = [];
+                        this.updateTopDonators();
+                        this.updateActivityFeed();
+                    }
+                });
+
+                const rewardsRef = database.ref(`dailyRewards/${this.userId}`);
+                rewardsRef.on('value', (snapshot) => {
+                    if (snapshot.exists()) {
+                        const rewardData = snapshot.val();
+                        localStorage.setItem('lastRewardTime', rewardData.lastClaimed.toString());
+                    }
+                });
             }
 
-            updateGoal() {
-                // Calculate which million we should be on
-                const millionsPassed = Math.floor(this.totalCoins / 1000000);
-                this.currentGoal = (millionsPassed + 1) * 1000000;
-            }
-
-            makeDonation() {
+            async makeDonation() {
                 if (this.selectedAmount <= 0) {
                     this.showNotification('Please select or enter a donation amount!', false);
                     return;
                 }
 
-                const donorName = this.donorNameEl.value.trim() || `Anonymous${Math.floor(Math.random() * 10000)}`;
-                const amount = this.selectedAmount;
-                const isEditorOfDoom = amount >= 50000;
-
-                const donation = {
-                    id: Date.now(),
-                    donorName,
-                    amount,
-                    timestamp: new Date(),
-                    isEditorOfDoom
-                };
-
-                this.totalCoins += amount;
-                this.donations.unshift(donation);
-                this.donations = this.donations.slice(0, 50); // Keep last 50
-
-                if (isEditorOfDoom) {
-                    this.doomActivations++;
-                }
-
-                this.updateTopDonators(donorName, amount);
-                this.updateGoal();
-                this.updateDisplay();
-                this.addToActivity(donation);
-                this.saveData();
-
-                if (isEditorOfDoom) {
-                    this.showNotification(`🔥 EDITOR OF DOOM ACTIVATED! 🔥\n${donorName} unleashed ${amount.toLocaleString()} coins of pure chaos!`, true);
-                    this.showBrowserNotification(donorName, amount);
-                } else {
-                    this.showNotification(`Thank you ${donorName}! You donated ${amount.toLocaleString()} coins!`, false);
-                }
-
-                // Reset form
-                this.selectedAmount = 0;
-                this.customAmountEl.value = '';
-                this.donorNameEl.value = '';
-                document.querySelectorAll('.quick-amount').forEach(b => b.classList.remove('selected'));
-            }
-
-            updateTopDonators(donorName, amount) {
-                const existingDonator = this.topDonators.find(d => d.name === donorName);
-                
-                if (existingDonator) {
-                    existingDonator.amount += amount;
-                } else {
-                    this.topDonators.push({ name: donorName, amount });
-                }
-
-                this.topDonators.sort((a, b) => b.amount - a.amount);
-                this.topDonators = this.topDonators.slice(0, 10);
-            }
-
-            updateDisplay() {
-                // Update goal display
-                this.goalAmountEl.textContent = this.currentGoal.toLocaleString();
-
-                // Update progress bar
-                const progressInCurrentMillion = this.totalCoins % 1000000;
-                const progressPercent = (progressInCurrentMillion / 1000000) * 100;
-                this.progressFillEl.style.width = `${progressPercent}%`;
-                this.progressTextEl.textContent = `${progressPercent.toFixed(1)}%`;
-
-                // Update stats
-                this.totalCoinsEl.textContent = this.totalCoins.toLocaleString();
-                this.totalDonatorsEl.textContent = this.topDonators.length;
-                
-                const avgDonation = this.donations.length > 0 
-                    ? Math.round(this.totalCoins / this.donations.length)
-                    : 0;
-                this.avgDonationEl.textContent = avgDonation.toLocaleString();
-                this.doomCountEl.textContent = this.doomActivations;
-
-                // Update top donators
-                this.updateTopDonatorsList();
-            }
-
-            updateTopDonatorsList() {
-                if (this.topDonators.length === 0) {
-                    this.topDonatorsListEl.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">No donations yet!</div>';
+                if (!this.isConnected) {
+                    this.showError('Cannot make donation while offline. Please check your connection.');
                     return;
                 }
 
-                this.topDonatorsListEl.innerHTML = this.topDonators.map((donator, index) => `
-                    <div class="donator-item">
-                        <span class="donator-rank">#${index + 1}</span>
-                        <span class="donator-name">${donator.name}</span>
-                        <span class="donator-amount">${donator.amount.toLocaleString()}</span>
-                    </div>
-                `).join('');
+                this.elements.donateBtn.disabled = true;
+                this.elements.donateBtn.textContent = '💝 Processing...';
+
+                try {
+                    const donorName = this.elements.donorName.value.trim() || 'Anonymous';
+                    const timestamp = Date.now();
+
+                    const donation = {
+                        amount: this.selectedAmount,
+                        donor: donorName,
+                        timestamp: timestamp,
+                        userId: this.userId
+                    };
+
+                    await database.ref('donations').push(donation);
+                    await this.updateStats(this.selectedAmount);
+
+                    if (this.selectedAmount >= 100000) {
+                        await this.activateDoom();
+                    }
+
+                    this.checkGoalCompletion();
+                    this.showNotification(`Thank you ${donorName} for donating ${this.formatNumber(this.selectedAmount)} coins!`, false);
+                    this.resetDonationForm();
+
+                } catch (error) {
+                    console.error('Donation error:', error);
+                    this.showError('Failed to process donation. Please try again.');
+                } finally {
+                    this.elements.donateBtn.disabled = false;
+                    this.elements.donateBtn.textContent = '💝 Donate Now';
+                }
             }
 
-            addToActivity(donation) {
-                const activityItem = document.createElement('div');
-                activityItem.className = `activity-item ${donation.isEditorOfDoom ? 'doom-activation' : ''}`;
-                
-                const timeStr = new Date().toLocaleTimeString();
-                activityItem.innerHTML = `
-                    <div class="activity-donor">${donation.isEditorOfDoom ? '🔥 ' : ''}${donation.donorName}</div>
-                    <div class="activity-amount">${donation.amount.toLocaleString()} coins</div>
-                    <div class="activity-time">${timeStr}</div>
-                    ${donation.isEditorOfDoom ? '<div style="font-weight: bold; margin-top: 5px;">⚡ EDITOR OF DOOM ⚡</div>' : ''}
-                `;
+            async updateStats(donationAmount) {
+                const statsRef = database.ref('stats');
+                const snapshot = await statsRef.once('value');
+                const currentStats = snapshot.val() || {};
 
-                // Remove "no activity" message if it exists
-                const noActivity = this.activityListEl.querySelector('[style*="text-align: center"]');
-                if (noActivity) {
-                    noActivity.remove();
-                }
+                const newStats = {
+                    totalCoins: (currentStats.totalCoins || 0) + donationAmount,
+                    totalDonations: (currentStats.totalDonations || 0) + 1,
+                    doomActivations: currentStats.doomActivations || 0,
+                    currentGoal: currentStats.currentGoal || 1000000
+                };
 
-                this.activityListEl.insertBefore(activityItem, this.activityListEl.firstChild);
+                await statsRef.set(newStats);
+            }
 
-                // Keep only last 20 activities
-                while (this.activityListEl.children.length > 20) {
-                    this.activityListEl.removeChild(this.activityListEl.lastChild);
+            async activateDoom() {
+                try {
+                    const statsRef = database.ref('stats');
+                    const snapshot = await statsRef.once('value');
+                    const currentStats = snapshot.val() || {};
+
+                    const newStats = {
+                        ...currentStats,
+                        doomActivations: (currentStats.doomActivations || 0) + 1
+                    };
+
+                    await statsRef.set(newStats);
+                    this.showNotification('💀 DOOM ACTIVATED! 💀 Someone donated 100K+ coins!', true);
+                } catch (error) {
+                    console.error('Doom activation error:', error);
                 }
             }
 
-            claimDailyReward() {
-                const now = new Date();
-                const lastReward = this.lastRewardTime ? new Date(this.lastRewardTime) : null;
-                
-                if (lastReward && now - lastReward < 24 * 60 * 60 * 1000) {
+            async claimDailyReward() {
+                const lastRewardTime = localStorage.getItem('lastRewardTime');
+                const now = Date.now();
+                const dayInMs = 24 * 60 * 60 * 1000;
+
+                if (lastRewardTime && (now - parseInt(lastRewardTime)) < dayInMs) {
                     this.showNotification('Daily reward already claimed! Come back tomorrow.', false);
                     return;
                 }
 
-                this.totalCoins += 5000;
-                this.lastRewardTime = now.toISOString();
-                localStorage.setItem('lastRewardTime', this.lastRewardTime);
+                if (!this.isConnected) {
+                    this.showError('Cannot claim reward while offline.');
+                    return;
+                }
 
-                this.updateDisplay();
-                this.saveData();
-                this.showNotification('Daily reward claimed! +5,000 coins!', false);
-                
-                const rewardDonation = {
-                    id: Date.now(),
-                    donorName: '🎁 Daily Reward',
-                    amount: 5000,
-                    timestamp: now,
-                    isEditorOfDoom: false
-                };
-                this.addToActivity(rewardDonation);
+                this.elements.dailyRewardBtn.disabled = true;
+                this.elements.dailyRewardBtn.textContent = 'Claiming...';
+
+                try {
+                    const donation = {
+                        amount: 5000,
+                        donor: 'Daily Reward System',
+                        timestamp: now,
+                        userId: 'system_daily_reward',
+                        isReward: true
+                    };
+
+                    await database.ref('donations').push(donation);
+                    await this.updateStats(5000);
+
+                    const rewardRef = database.ref(`dailyRewards/${this.userId}`);
+                    const currentReward = await rewardRef.once('value');
+                    
+                    await rewardRef.set({
+                        lastClaimed: now,
+                        totalClaimed: (currentReward.val()?.totalClaimed || 0) + 1
+                    });
+
+                    localStorage.setItem('lastRewardTime', now.toString());
+                    this.showNotification('🎁 Daily reward claimed! +5,000 coins added to the fundraiser!', false);
+
+                } catch (error) {
+                    console.error('Daily reward error:', error);
+                    this.showError('Failed to claim daily reward. Please try again.');
+                } finally {
+                    this.elements.dailyRewardBtn.disabled = false;
+                    this.elements.dailyRewardBtn.textContent = 'Claim 5,000 Coins';
+                }
             }
 
-            startRewardTimer() {
-                const updateTimer = () => {
-                    if (!this.lastRewardTime) {
-                        this.rewardTimerEl.textContent = 'Available now!';
-                        this.dailyRewardBtnEl.disabled = false;
-                        return;
+            updateStatsDisplay() {
+                this.elements.totalCoins.textContent = this.formatNumber(this.totalCoins);
+                this.elements.totalDonators.textContent = this.donations.length;
+                this.elements.avgDonation.textContent = this.donations.length > 0 ? 
+                    this.formatNumber(Math.round(this.totalCoins / this.donations.length)) : '0';
+                this.elements.doomCount.textContent = this.doomActivations;
+                this.elements.goalAmount.textContent = this.formatNumber(this.currentGoal);
+
+                const progress = Math.min((this.totalCoins / this.currentGoal) * 100, 100);
+                this.elements.progressFill.style.width = `${progress}%`;
+                this.elements.progressText.textContent = `${Math.round(progress)}%`;
+            }
+
+            updateTopDonators() {
+                const donatorTotals = {};
+                this.donations.forEach(donation => {
+                    if (!donation.isReward) {
+                        const donor = donation.donor;
+                        donatorTotals[donor] = (donatorTotals[donor] || 0) + donation.amount;
                     }
+                });
 
-                    const lastReward = new Date(this.lastRewardTime);
-                    const nextReward = new Date(lastReward.getTime() + 24 * 60 * 60 * 1000);
-                    const now = new Date();
-                    const timeLeft = nextReward - now;
+                this.topDonators = Object.entries(donatorTotals)
+                    .map(([name, amount]) => ({ name, amount }))
+                    .sort((a, b) => b.amount - a.amount)
+                    .slice(0, 10);
 
-                    if (timeLeft <= 0) {
-                        this.rewardTimerEl.textContent = 'Available now!';
-                        this.dailyRewardBtnEl.disabled = false;
-                    } else {
-                        const hours = Math.floor(timeLeft / (60 * 60 * 1000));
-                        const minutes = Math.floor((timeLeft % (60 * 60 * 1000)) / (60 * 1000));
-                        this.rewardTimerEl.textContent = `Next reward in: ${hours}h ${minutes}m`;
-                        this.dailyRewardBtnEl.disabled = true;
-                    }
-                };
-
-                updateTimer();
-                setInterval(updateTimer, 60000); // Update every minute
+                if (this.topDonators.length === 0) {
+                    this.elements.topDonatorsList.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">No donations yet!</div>';
+                } else {
+                    this.elements.topDonatorsList.innerHTML = this.topDonators
+                        .map((donator, index) => `
+                            <div class="donator-item">
+                                <span class="donator-rank">#${index + 1}</span>
+                                <span class="donator-name">${donator.name}</span>
+                                <span class="donator-amount">${this.formatNumber(donator.amount)}</span>
+                            </div>
+                        `).join('');
+                }
             }
 
-            showNotification(message, isDoom) {
-                const notification = document.createElement('div');
-                notification.className = `notification ${isDoom ? 'doom' : ''}`;
-                notification.innerHTML = `
-                    <div style="font-weight: bold; margin-bottom: 10px;">${isDoom ? '🔥 EDITOR OF DOOM! 🔥' : '💝 Donation Alert'}</div>
-                    <div>${message}</div>
-                `;
+            updateActivityFeed() {
+                if (this.donations.length === 0) {
+                    this.elements.activityList.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">No recent activity</div>';
+                    return;
+                }
 
-                document.body.appendChild(notification);
-
-                setTimeout(() => {
-                    notification.style.animation = 'slideInRight 0.5s ease reverse';
-                    setTimeout(() => {
-                        document.body.removeChild(notification);
-                    }, 500);
-                }, isDoom ? 8000 : 3000);
+                const recentDonations = this.donations.slice(0, 20);
+                this.elements.activityList.innerHTML = recentDonations
+                    .map(donation => {
+                        const isDoom = donation.amount >= 100000;
+                        const timeAgo = this.getTimeAgo(donation.timestamp);
+                        const isReward = donation.isReward;
+                        
+                        return `
+                            <div class="activity-item ${isDoom ? 'doom-activation' : ''}">
+                                <div class="activity-donor">${isReward ? '🎁 ' : ''}${donation.donor}</div>
+                                <div class="activity-amount">+${this.formatNumber(donation.amount)} coins</div>
+                                <div class="activity-time">${timeAgo}</div>
+                                ${isDoom ? '<div style="font-weight: bold; color: #fff;">💀 DOOM ACTIVATED! 💀</div>' : ''}
+                            </div>
+                        `;
+                    }).join('');
             }
 
-            showBrowserNotification(donorName, amount) {
-                if ('Notification' in window && Notification.permission === 'granted') {
-                    new Notification('🔥 Editor Of Doom Activated!', {
-                        body: `${donorName} donated ${amount.toLocaleString()} coins!`,
-                        icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🎬</text></svg>'
+            checkGoalCompletion() {
+                if (this.totalCoins >= this.currentGoal) {
+                    this.showNotification(`🎉 Goal Reached! ${this.formatNumber(this.currentGoal)} coins collected!`, false);
+                    
+                    this.currentGoal += 1000000;
+                    database.ref('stats/currentGoal').set(this.currentGoal).catch(error => {
+                        console.error('Goal update error:', error);
                     });
                 }
             }
+
+            updateRewardTimer() {
+                const lastRewardTime = localStorage.getItem('lastRewardTime');
+                if (!lastRewardTime) {
+                    this.elements.rewardTimer.textContent = 'Available now!';
+                    this.elements.dailyRewardBtn.disabled = false;
+                    return;
+                }
+
+                const now = Date.now();
+                const lastClaimed = parseInt(lastRewardTime);
+                const dayInMs = 24 * 60 * 60 * 1000;
+                const timeSinceLastClaim = now - lastClaimed;
+
+                if (timeSinceLastClaim >= dayInMs) {
+                    this.elements.rewardTimer.textContent = 'Available now!';
+                    this.elements.dailyRewardBtn.disabled = false;
+                } else {
+                    const timeRemaining = dayInMs - timeSinceLastClaim;
+                    const hours = Math.floor(timeRemaining / (60 * 60 * 1000));
+                    const minutes = Math.floor((timeRemaining % (60 * 60 * 1000)) / (60 * 1000));
+                    this.elements.rewardTimer.textContent = `Next reward in: ${hours}h ${minutes}m`;
+                    this.elements.dailyRewardBtn.disabled = true;
+                }
+            }
+
+            resetDonationForm() {
+                this.selectedAmount = 0;
+                this.elements.donorName.value = '';
+                this.elements.customAmount.value = '';
+                document.querySelectorAll('.quick-amount').forEach(b => b.classList.remove('selected'));
+            }
+
+            showNotification(message, isDoom = false) {
+                const notification = document.createElement('div');
+                notification.className = `notification ${isDoom ? 'doom' : ''}`;
+                notification.innerHTML = `<div>${message}</div>`;
+                document.body.appendChild(notification);
+
+                setTimeout(() => {
+                    notification.remove();
+                }, 5000);
+            }
+
+            showConnectionStatus(status) {
+                const statusElement = this.elements.connectionStatus;
+                statusElement.className = `connection-status ${status}`;
+                
+                switch (status) {
+                    case 'connecting':
+                        statusElement.textContent = '🔌 Connecting...';
+                        break;
+                    case 'online':
+                        statusElement.textContent = '🟢 Online';
+                        break;
+                    case 'offline':
+                        statusElement.textContent = '🔴 Offline';
+                        break;
+                }
+            }
+
+            showError(message) {
+                this.elements.errorMessage.textContent = message;
+                this.elements.errorMessage.style.display = 'block';
+            }
+
+            hideError() {
+                this.elements.errorMessage.style.display = 'none';
+            }
+
+            formatNumber(num) {
+                if (num >= 1000000) {
+                    return (num / 1000000).toFixed(1) + 'M';
+                }
+                if (num >= 1000) {
+                    return (num / 1000).toFixed(1) + 'K';
+                }
+                return num.toString();
+            }
+
+            getTimeAgo(timestamp) {
+                const now = Date.now();
+                const diff = now - timestamp;
+                const minutes = Math.floor(diff / 60000);
+                const hours = Math.floor(diff / 3600000);
+                const days = Math.floor(diff / 86400000);
+
+                if (days > 0) return `${days}d ago`;
+                if (hours > 0) return `${hours}h ago`;
+                if (minutes > 0) return `${minutes}m ago`;
+                return 'Just now';
+            }
         }
 
-        // Initialize the app when the page loads
         document.addEventListener('DOMContentLoaded', () => {
-            new FundraiserApp();
+            window.fundraiserApp = new FundraiserApp();
         });
     </script>
 </body>
