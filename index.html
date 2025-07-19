@@ -1,0 +1,746 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Editor Fundraiser</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .progress-section {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .goal-display {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .goal-amount {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #4f46e5;
+        }
+
+        .goal-label {
+            font-size: 1.1rem;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #e5e7eb;
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 20px 0;
+            position: relative;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4f46e5, #7c3aed);
+            border-radius: 15px;
+            transition: width 0.5s ease;
+            position: relative;
+        }
+
+        .progress-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+
+        .donation-controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .quick-amount {
+            padding: 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 10px;
+            background: white;
+            cursor: pointer;
+            text-align: center;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .quick-amount:hover, .quick-amount.selected {
+            border-color: #4f46e5;
+            background: #4f46e5;
+            color: white;
+        }
+
+        .custom-input {
+            grid-column: 1 / -1;
+            padding: 15px;
+            border: 2px solid #e5e7eb;
+            border-radius: 10px;
+            font-size: 1rem;
+            margin-bottom: 15px;
+        }
+
+        .donor-name-input {
+            padding: 15px;
+            border: 2px solid #e5e7eb;
+            border-radius: 10px;
+            font-size: 1rem;
+            margin-bottom: 15px;
+            width: 100%;
+        }
+
+        .donate-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(90deg, #4f46e5, #7c3aed);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+
+        .donate-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .donate-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .stats-card, .activity-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 15px;
+            background: #f8fafc;
+            border-radius: 10px;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #4f46e5;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .daily-reward {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .reward-btn {
+            padding: 12px 24px;
+            background: linear-gradient(90deg, #10b981, #059669);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+
+        .reward-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .reward-btn:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .activity-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .activity-item {
+            padding: 15px;
+            border-bottom: 1px solid #e5e7eb;
+            animation: slideIn 0.5s ease;
+        }
+
+        .activity-item:last-child {
+            border-bottom: none;
+        }
+
+        .activity-donor {
+            font-weight: bold;
+            color: #4f46e5;
+        }
+
+        .activity-amount {
+            font-weight: bold;
+            color: #059669;
+        }
+
+        .activity-time {
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        .doom-activation {
+            background: linear-gradient(45deg, #ff6b6b, #ffd93d);
+            color: white;
+            border-radius: 10px;
+            padding: 15px !important;
+            margin: 10px 0;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.05);
+            }
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            z-index: 1000;
+            animation: slideInRight 0.5s ease;
+            max-width: 350px;
+        }
+
+        .notification.doom {
+            background: linear-gradient(45deg, #ff6b6b, #ffd93d);
+            color: white;
+        }
+
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(100%);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .top-donators {
+            margin-top: 20px;
+        }
+
+        .donator-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .donator-item:last-child {
+            border-bottom: none;
+        }
+
+        .donator-rank {
+            font-weight: bold;
+            color: #4f46e5;
+            margin-right: 10px;
+        }
+
+        .donator-name {
+            flex: 1;
+        }
+
+        .donator-amount {
+            font-weight: bold;
+            color: #059669;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎬 Video Editor Fundraiser</h1>
+            <p>Help us reach our goal and unlock amazing rewards!</p>
+        </div>
+
+        <div class="main-content">
+            <div class="progress-section">
+                <div class="goal-display">
+                    <div class="goal-amount" id="goalAmount">1,000,000</div>
+                    <div class="goal-label">Current Goal (Coins)</div>
+                </div>
+
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                    <div class="progress-text" id="progressText">0%</div>
+                </div>
+
+                <div class="donation-controls">
+                    <div class="quick-amount" data-amount="100">100</div>
+                    <div class="quick-amount" data-amount="500">500</div>
+                    <div class="quick-amount" data-amount="1000">1K</div>
+                    <div class="quick-amount" data-amount="5000">5K</div>
+                    <div class="quick-amount" data-amount="10000">10K</div>
+                    <div class="quick-amount" data-amount="50000">50K</div>
+                    <input type="number" class="custom-input" id="customAmount" placeholder="Enter custom amount" min="1">
+                </div>
+
+                <input type="text" class="donor-name-input" id="donorName" placeholder="Enter your name (optional)">
+                
+                <button class="donate-btn" id="donateBtn">💝 Donate Now</button>
+            </div>
+
+            <div class="sidebar">
+                <div class="stats-card">
+                    <h3>📊 Statistics</h3>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-value" id="totalCoins">0</div>
+                            <div class="stat-label">Total Coins</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="totalDonators">0</div>
+                            <div class="stat-label">Contributors</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="avgDonation">0</div>
+                            <div class="stat-label">Avg Donation</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="doomCount">0</div>
+                            <div class="stat-label">Doom Activations</div>
+                        </div>
+                    </div>
+
+                    <div class="daily-reward">
+                        <h4>🎁 Daily Reward</h4>
+                        <button class="reward-btn" id="dailyRewardBtn">Claim 5,000 Coins</button>
+                        <div id="rewardTimer" style="margin-top: 10px; font-size: 0.9rem; color: #666;"></div>
+                    </div>
+
+                    <div class="top-donators">
+                        <h4>🏆 Top Donators</h4>
+                        <div id="topDonatorsList">
+                            <div style="text-align: center; color: #666; padding: 20px;">No donations yet!</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="activity-card">
+                    <h3>🔥 Live Activity</h3>
+                    <div class="activity-list" id="activityList">
+                        <div style="text-align: center; color: #666; padding: 20px;">No recent activity</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class FundraiserApp {
+            constructor() {
+                this.totalCoins = 0;
+                this.donations = [];
+                this.topDonators = [];
+                this.currentGoal = 1000000; // Start at 1M
+                this.selectedAmount = 0;
+                this.lastRewardTime = localStorage.getItem('lastRewardTime');
+                this.doomActivations = 0;
+
+                this.initializeElements();
+                this.bindEvents();
+                this.loadData();
+                this.updateDisplay();
+                this.startRewardTimer();
+                this.requestNotificationPermission();
+            }
+
+            initializeElements() {
+                this.goalAmountEl = document.getElementById('goalAmount');
+                this.progressFillEl = document.getElementById('progressFill');
+                this.progressTextEl = document.getElementById('progressText');
+                this.totalCoinsEl = document.getElementById('totalCoins');
+                this.totalDonatorsEl = document.getElementById('totalDonators');
+                this.avgDonationEl = document.getElementById('avgDonation');
+                this.doomCountEl = document.getElementById('doomCount');
+                this.customAmountEl = document.getElementById('customAmount');
+                this.donorNameEl = document.getElementById('donorName');
+                this.donateBtnEl = document.getElementById('donateBtn');
+                this.dailyRewardBtnEl = document.getElementById('dailyRewardBtn');
+                this.rewardTimerEl = document.getElementById('rewardTimer');
+                this.topDonatorsListEl = document.getElementById('topDonatorsList');
+                this.activityListEl = document.getElementById('activityList');
+            }
+
+            bindEvents() {
+                // Quick amount selection
+                document.querySelectorAll('.quick-amount').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        document.querySelectorAll('.quick-amount').forEach(b => b.classList.remove('selected'));
+                        btn.classList.add('selected');
+                        this.selectedAmount = parseInt(btn.dataset.amount);
+                        this.customAmountEl.value = '';
+                    });
+                });
+
+                // Custom amount input
+                this.customAmountEl.addEventListener('input', () => {
+                    document.querySelectorAll('.quick-amount').forEach(b => b.classList.remove('selected'));
+                    this.selectedAmount = parseInt(this.customAmountEl.value) || 0;
+                });
+
+                // Donate button
+                this.donateBtnEl.addEventListener('click', () => this.makeDonation());
+
+                // Daily reward button
+                this.dailyRewardBtnEl.addEventListener('click', () => this.claimDailyReward());
+            }
+
+            async requestNotificationPermission() {
+                if ('Notification' in window && Notification.permission === 'default') {
+                    await Notification.requestPermission();
+                }
+            }
+
+            loadData() {
+                const savedData = localStorage.getItem('fundraiserData');
+                if (savedData) {
+                    const data = JSON.parse(savedData);
+                    this.totalCoins = data.totalCoins || 0;
+                    this.donations = data.donations || [];
+                    this.topDonators = data.topDonators || [];
+                    this.doomActivations = data.doomActivations || 0;
+                    this.updateGoal();
+                }
+            }
+
+            saveData() {
+                const data = {
+                    totalCoins: this.totalCoins,
+                    donations: this.donations,
+                    topDonators: this.topDonators,
+                    doomActivations: this.doomActivations
+                };
+                localStorage.setItem('fundraiserData', JSON.stringify(data));
+            }
+
+            updateGoal() {
+                // Calculate which million we should be on
+                const millionsPassed = Math.floor(this.totalCoins / 1000000);
+                this.currentGoal = (millionsPassed + 1) * 1000000;
+            }
+
+            makeDonation() {
+                if (this.selectedAmount <= 0) {
+                    this.showNotification('Please select or enter a donation amount!', false);
+                    return;
+                }
+
+                const donorName = this.donorNameEl.value.trim() || `Anonymous${Math.floor(Math.random() * 10000)}`;
+                const amount = this.selectedAmount;
+                const isEditorOfDoom = amount >= 50000;
+
+                const donation = {
+                    id: Date.now(),
+                    donorName,
+                    amount,
+                    timestamp: new Date(),
+                    isEditorOfDoom
+                };
+
+                this.totalCoins += amount;
+                this.donations.unshift(donation);
+                this.donations = this.donations.slice(0, 50); // Keep last 50
+
+                if (isEditorOfDoom) {
+                    this.doomActivations++;
+                }
+
+                this.updateTopDonators(donorName, amount);
+                this.updateGoal();
+                this.updateDisplay();
+                this.addToActivity(donation);
+                this.saveData();
+
+                if (isEditorOfDoom) {
+                    this.showNotification(`🔥 EDITOR OF DOOM ACTIVATED! 🔥\n${donorName} unleashed ${amount.toLocaleString()} coins of pure chaos!`, true);
+                    this.showBrowserNotification(donorName, amount);
+                } else {
+                    this.showNotification(`Thank you ${donorName}! You donated ${amount.toLocaleString()} coins!`, false);
+                }
+
+                // Reset form
+                this.selectedAmount = 0;
+                this.customAmountEl.value = '';
+                this.donorNameEl.value = '';
+                document.querySelectorAll('.quick-amount').forEach(b => b.classList.remove('selected'));
+            }
+
+            updateTopDonators(donorName, amount) {
+                const existingDonator = this.topDonators.find(d => d.name === donorName);
+                
+                if (existingDonator) {
+                    existingDonator.amount += amount;
+                } else {
+                    this.topDonators.push({ name: donorName, amount });
+                }
+
+                this.topDonators.sort((a, b) => b.amount - a.amount);
+                this.topDonators = this.topDonators.slice(0, 10);
+            }
+
+            updateDisplay() {
+                // Update goal display
+                this.goalAmountEl.textContent = this.currentGoal.toLocaleString();
+
+                // Update progress bar
+                const progressInCurrentMillion = this.totalCoins % 1000000;
+                const progressPercent = (progressInCurrentMillion / 1000000) * 100;
+                this.progressFillEl.style.width = `${progressPercent}%`;
+                this.progressTextEl.textContent = `${progressPercent.toFixed(1)}%`;
+
+                // Update stats
+                this.totalCoinsEl.textContent = this.totalCoins.toLocaleString();
+                this.totalDonatorsEl.textContent = this.topDonators.length;
+                
+                const avgDonation = this.donations.length > 0 
+                    ? Math.round(this.totalCoins / this.donations.length)
+                    : 0;
+                this.avgDonationEl.textContent = avgDonation.toLocaleString();
+                this.doomCountEl.textContent = this.doomActivations;
+
+                // Update top donators
+                this.updateTopDonatorsList();
+            }
+
+            updateTopDonatorsList() {
+                if (this.topDonators.length === 0) {
+                    this.topDonatorsListEl.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">No donations yet!</div>';
+                    return;
+                }
+
+                this.topDonatorsListEl.innerHTML = this.topDonators.map((donator, index) => `
+                    <div class="donator-item">
+                        <span class="donator-rank">#${index + 1}</span>
+                        <span class="donator-name">${donator.name}</span>
+                        <span class="donator-amount">${donator.amount.toLocaleString()}</span>
+                    </div>
+                `).join('');
+            }
+
+            addToActivity(donation) {
+                const activityItem = document.createElement('div');
+                activityItem.className = `activity-item ${donation.isEditorOfDoom ? 'doom-activation' : ''}`;
+                
+                const timeStr = new Date().toLocaleTimeString();
+                activityItem.innerHTML = `
+                    <div class="activity-donor">${donation.isEditorOfDoom ? '🔥 ' : ''}${donation.donorName}</div>
+                    <div class="activity-amount">${donation.amount.toLocaleString()} coins</div>
+                    <div class="activity-time">${timeStr}</div>
+                    ${donation.isEditorOfDoom ? '<div style="font-weight: bold; margin-top: 5px;">⚡ EDITOR OF DOOM ⚡</div>' : ''}
+                `;
+
+                // Remove "no activity" message if it exists
+                const noActivity = this.activityListEl.querySelector('[style*="text-align: center"]');
+                if (noActivity) {
+                    noActivity.remove();
+                }
+
+                this.activityListEl.insertBefore(activityItem, this.activityListEl.firstChild);
+
+                // Keep only last 20 activities
+                while (this.activityListEl.children.length > 20) {
+                    this.activityListEl.removeChild(this.activityListEl.lastChild);
+                }
+            }
+
+            claimDailyReward() {
+                const now = new Date();
+                const lastReward = this.lastRewardTime ? new Date(this.lastRewardTime) : null;
+                
+                if (lastReward && now - lastReward < 24 * 60 * 60 * 1000) {
+                    this.showNotification('Daily reward already claimed! Come back tomorrow.', false);
+                    return;
+                }
+
+                this.totalCoins += 5000;
+                this.lastRewardTime = now.toISOString();
+                localStorage.setItem('lastRewardTime', this.lastRewardTime);
+
+                this.updateDisplay();
+                this.saveData();
+                this.showNotification('Daily reward claimed! +5,000 coins!', false);
+                
+                const rewardDonation = {
+                    id: Date.now(),
+                    donorName: '🎁 Daily Reward',
+                    amount: 5000,
+                    timestamp: now,
+                    isEditorOfDoom: false
+                };
+                this.addToActivity(rewardDonation);
+            }
+
+            startRewardTimer() {
+                const updateTimer = () => {
+                    if (!this.lastRewardTime) {
+                        this.rewardTimerEl.textContent = 'Available now!';
+                        this.dailyRewardBtnEl.disabled = false;
+                        return;
+                    }
+
+                    const lastReward = new Date(this.lastRewardTime);
+                    const nextReward = new Date(lastReward.getTime() + 24 * 60 * 60 * 1000);
+                    const now = new Date();
+                    const timeLeft = nextReward - now;
+
+                    if (timeLeft <= 0) {
+                        this.rewardTimerEl.textContent = 'Available now!';
+                        this.dailyRewardBtnEl.disabled = false;
+                    } else {
+                        const hours = Math.floor(timeLeft / (60 * 60 * 1000));
+                        const minutes = Math.floor((timeLeft % (60 * 60 * 1000)) / (60 * 1000));
+                        this.rewardTimerEl.textContent = `Next reward in: ${hours}h ${minutes}m`;
+                        this.dailyRewardBtnEl.disabled = true;
+                    }
+                };
+
+                updateTimer();
+                setInterval(updateTimer, 60000); // Update every minute
+            }
+
+            showNotification(message, isDoom) {
+                const notification = document.createElement('div');
+                notification.className = `notification ${isDoom ? 'doom' : ''}`;
+                notification.innerHTML = `
+                    <div style="font-weight: bold; margin-bottom: 10px;">${isDoom ? '🔥 EDITOR OF DOOM! 🔥' : '💝 Donation Alert'}</div>
+                    <div>${message}</div>
+                `;
+
+                document.body.appendChild(notification);
+
+                setTimeout(() => {
+                    notification.style.animation = 'slideInRight 0.5s ease reverse';
+                    setTimeout(() => {
+                        document.body.removeChild(notification);
+                    }, 500);
+                }, isDoom ? 8000 : 3000);
+            }
+
+            showBrowserNotification(donorName, amount) {
+                if ('Notification' in window && Notification.permission === 'granted') {
+                    new Notification('🔥 Editor Of Doom Activated!', {
+                        body: `${donorName} donated ${amount.toLocaleString()} coins!`,
+                        icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🎬</text></svg>'
+                    });
+                }
+            }
+        }
+
+        // Initialize the app when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new FundraiserApp();
+        });
+    </script>
+</body>
+</html>
