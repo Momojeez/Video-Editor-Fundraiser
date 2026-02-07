@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -538,19 +537,19 @@
     <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-        import { getDatabase, ref, push, set, get, onValue, serverTimestamp, off } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+        import { getDatabase, ref, push, set, get, onValue, update, remove, onDisconnect } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
 
         // Firebase configuration
         const firebaseConfig = {
-  apiKey: "AIzaSyAA9cKZi1r4W4ycxWj2OsvDaFmBKMQqCds",
-  authDomain: "videoeditorfundraiser.firebaseapp.com",
-  databaseURL: "https://videoeditorfundraiser-default-rtdb.firebaseio.com",
-  projectId: "videoeditorfundraiser",
-  storageBucket: "videoeditorfundraiser.firebasestorage.app",
-  messagingSenderId: "470003540715",
-  appId: "1:470003540715:web:75b8f2e66d5d7a93c294ae",
-  measurementId: "G-4DDKZCPFL5"
-};
+            apiKey: "AIzaSyAA9cKZi1r4W4ycxWj2OsvDaFmBKMQqCds",
+            authDomain: "videoeditorfundraiser.firebaseapp.com",
+            databaseURL: "https://videoeditorfundraiser-default-rtdb.firebaseio.com",
+            projectId: "videoeditorfundraiser",
+            storageBucket: "videoeditorfundraiser.firebasestorage.app",
+            messagingSenderId: "470003540715",
+            appId: "1:470003540715:web:75b8f2e66d5d7a93c294ae",
+            measurementId: "G-4DDKZCPFL5"
+        };
 
         // Initialize Firebase
         const app = initializeApp(firebaseConfig);
@@ -559,7 +558,7 @@
         class FundraiserApp {
             constructor() {
                 this.totalCoins = 0;
-                this.userCoins = 50000; // Starting coins
+                this.userCoins = 50000;
                 this.donations = [];
                 this.topDonators = [];
                 this.currentGoal = 1000000;
@@ -567,7 +566,9 @@
                 this.doomActivations = 0;
                 this.userId = this.generateUserId();
                 this.isConnected = false;
-                this.listeners = [];
+                this.listeners = new Map();
+                this.retryCount = 0;
+                this.maxRetries = 3;
 
                 this.initializeElements();
                 this.bindEvents();
@@ -621,7 +622,6 @@
             }
 
             bindEvents() {
-                // Quick amount selection
                 document.querySelectorAll('.quick-amount').forEach(btn => {
                     btn.addEventListener('click', () => {
                         document.querySelectorAll('.quick-amount').forEach(b => b.classList.remove('selected'));
@@ -632,20 +632,15 @@
                     });
                 });
 
-                // Custom amount input
                 this.elements.customAmount.addEventListener('input', () => {
                     document.querySelectorAll('.quick-amount').forEach(b => b.classList.remove('selected'));
                     this.selectedAmount = parseInt(this.elements.customAmount.value) || 0;
                     this.updateDonateButton();
                 });
 
-                // Donate button
                 this.elements.donateBtn.addEventListener('click', () => this.makeDonation());
-
-                // Daily reward button
                 this.elements.dailyRewardBtn.addEventListener('click', () => this.claimDailyReward());
 
-                // Check daily reward timer
                 this.updateRewardTimer();
                 setInterval(() => this.updateRewardTimer(), 1000);
             }
@@ -676,57 +671,102 @@
             async initializeFirebase() {
                 try {
                     this.showConnectionStatus('connecting');
+                    console.log('Initializing Firebase connection...');
                     
+                    // Test database connection
+                    await this.testConnection();
+                    
+                    // Initialize database structure
                     await this.initializeDatabaseStructure();
+                    
+                    // Setup realtime listeners
                     this.setupRealtimeListeners();
                     
                     this.showConnectionStatus('online');
                     this.isConnected = true;
+                    this.retryCount = 0;
                     this.hideError();
+                    console.log('Firebase initialized successfully');
                 } catch (error) {
                     console.error('Firebase initialization error:', error);
                     this.showConnectionStatus('offline');
-                    this.showError('Failed to connect to database. Some features may not work properly.');
+                    this.showError(`Connection failed: ${error.message}. Retrying...`);
                     this.isConnected = false;
+                    
+                    // Retry connection
+                    if (this.retryCount < this.maxRetries) {
+                        this.retryCount++;
+                        setTimeout(() => this.initializeFirebase(), 3000 * this.retryCount);
+                    } else {
+                        this.showError('Failed to connect after multiple attempts. Please refresh the page.');
+                    }
+                }
+            }
+
+            async testConnection() {
+                try {
+                    const testRef = ref(db, '.info/connected');
+                    const snapshot = await get(testRef);
+                    console.log('Connection test:', snapshot.val());
+                    return snapshot.val();
+                } catch (error) {
+                    console.error('Connection test failed:', error);
+                    throw new Error('Unable to connect to Firebase');
                 }
             }
 
             async initializeDatabaseStructure() {
-                const statsRef = ref(db, 'stats');
-                const snapshot = await get(statsRef);
-                
-                if (!snapshot.exists()) {
-                    await set(ref(db, 'stats'), {
-                        totalCoins: 0,
-                        totalDonations: 0,
-                        doomActivations: 0,
-                        currentGoal: 1000000
-                    });
+                try {
+                    const statsRef = ref(db, 'stats');
+                    const snapshot = await get(statsRef);
+                    
+                    if (!snapshot.exists()) {
+                        console.log('Creating initial database structure...');
+                        await set(statsRef, {
+                            totalCoins: 0,
+                            totalDonations: 0,
+                            doomActivations: 0,
+                            currentGoal: 1000000,
+                            lastUpdated: Date.now()
+                        });
+                        console.log('Database structure created');
+                    } else {
+                        console.log('Database structure already exists');
+                    }
+                } catch (error) {
+                    console.error('Database structure initialization error:', error);
+                    throw error;
                 }
             }
 
             setupRealtimeListeners() {
+                // Stats listener
                 const statsRef = ref(db, 'stats');
-                const statsListener = onValue(statsRef, (snapshot) => {
+                onValue(statsRef, (snapshot) => {
                     if (snapshot.exists()) {
                         const stats = snapshot.val();
                         this.totalCoins = stats.totalCoins || 0;
                         this.doomActivations = stats.doomActivations || 0;
                         this.currentGoal = stats.currentGoal || 1000000;
                         this.updateStatsDisplay();
+                        console.log('Stats updated:', stats);
                     }
                 }, (error) => {
                     console.error('Stats listener error:', error);
                     this.showError('Failed to sync statistics');
                 });
 
+                // Donations listener
                 const donationsRef = ref(db, 'donations');
-                const donationsListener = onValue(donationsRef, (snapshot) => {
+                onValue(donationsRef, (snapshot) => {
                     if (snapshot.exists()) {
                         const donationsData = snapshot.val();
-                        this.donations = Object.values(donationsData).sort((a, b) => b.timestamp - a.timestamp);
+                        this.donations = Object.entries(donationsData)
+                            .map(([key, value]) => ({ ...value, key }))
+                            .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
                         this.updateTopDonators();
                         this.updateActivityFeed();
+                        console.log('Donations updated:', this.donations.length);
                     } else {
                         this.donations = [];
                         this.updateTopDonators();
@@ -737,17 +777,18 @@
                     this.showError('Failed to sync donations');
                 });
 
+                // Daily rewards listener
                 const rewardsRef = ref(db, `dailyRewards/${this.userId}`);
-                const rewardsListener = onValue(rewardsRef, (snapshot) => {
+                onValue(rewardsRef, (snapshot) => {
                     if (snapshot.exists()) {
                         const rewardData = snapshot.val();
-                        localStorage.setItem('lastRewardTime', rewardData.lastClaimed.toString());
+                        if (rewardData.lastClaimed) {
+                            localStorage.setItem('lastRewardTime', rewardData.lastClaimed.toString());
+                        }
                     }
                 }, (error) => {
                     console.error('Daily rewards listener error:', error);
                 });
-
-                this.listeners = [statsListener, donationsListener, rewardsListener];
             }
 
             async makeDonation() {
@@ -787,11 +828,15 @@
                         userId: this.userId
                     };
 
+                    // Add donation to database
                     const donationsRef = ref(db, 'donations');
-                    await push(donationsRef, donation);
+                    const newDonationRef = await push(donationsRef, donation);
+                    console.log('Donation added:', newDonationRef.key);
 
+                    // Update stats
                     await this.updateStats(this.selectedAmount);
 
+                    // Check for doom activation
                     if (this.selectedAmount >= 100000) {
                         await this.activateDoom();
                     }
@@ -812,25 +857,37 @@
                     this.userCoins += this.selectedAmount;
                     this.saveUserData();
                     this.updateUserCoinsDisplay();
-                    this.showError('Failed to process donation. Please try again.');
+                    this.showError(`Failed to process donation: ${error.message}`);
                 } finally {
                     this.updateDonateButton();
                 }
             }
 
             async updateStats(donationAmount) {
-                const statsRef = ref(db, 'stats');
-                const snapshot = await get(statsRef);
-                const currentStats = snapshot.val() || {};
+                try {
+                    const statsRef = ref(db, 'stats');
+                    const snapshot = await get(statsRef);
+                    const currentStats = snapshot.val() || {
+                        totalCoins: 0,
+                        totalDonations: 0,
+                        doomActivations: 0,
+                        currentGoal: 1000000
+                    };
 
-                const newStats = {
-                    totalCoins: (currentStats.totalCoins || 0) + donationAmount,
-                    totalDonations: (currentStats.totalDonations || 0) + 1,
-                    doomActivations: currentStats.doomActivations || 0,
-                    currentGoal: currentStats.currentGoal || 1000000
-                };
+                    const newStats = {
+                        totalCoins: (currentStats.totalCoins || 0) + donationAmount,
+                        totalDonations: (currentStats.totalDonations || 0) + 1,
+                        doomActivations: currentStats.doomActivations || 0,
+                        currentGoal: currentStats.currentGoal || 1000000,
+                        lastUpdated: Date.now()
+                    };
 
-                await set(statsRef, newStats);
+                    await set(statsRef, newStats);
+                    console.log('Stats updated successfully');
+                } catch (error) {
+                    console.error('Stats update error:', error);
+                    throw error;
+                }
             }
 
             async activateDoom() {
@@ -839,13 +896,13 @@
                     const snapshot = await get(statsRef);
                     const currentStats = snapshot.val() || {};
 
-                    const newStats = {
-                        ...currentStats,
-                        doomActivations: (currentStats.doomActivations || 0) + 1
-                    };
+                    await update(statsRef, {
+                        doomActivations: (currentStats.doomActivations || 0) + 1,
+                        lastUpdated: Date.now()
+                    });
 
-                    await set(statsRef, newStats);
                     this.showNotification('💀 DOOM ACTIVATED! 💀 Someone donated 100K+ coins!', true);
+                    console.log('Doom activated!');
                 } catch (error) {
                     console.error('Doom activation error:', error);
                 }
@@ -890,9 +947,12 @@
                     await this.updateStats(5000);
 
                     const rewardRef = ref(db, `dailyRewards/${this.userId}`);
+                    const currentReward = await get(rewardRef);
+                    const totalClaimed = currentReward.exists() ? (currentReward.val().totalClaimed || 0) + 1 : 1;
+
                     await set(rewardRef, {
                         lastClaimed: now,
-                        totalClaimed: (await get(rewardRef)).val()?.totalClaimed + 1 || 1
+                        totalClaimed: totalClaimed
                     });
 
                     localStorage.setItem('lastRewardTime', now.toString());
@@ -904,7 +964,7 @@
                     this.userCoins -= 5000;
                     this.saveUserData();
                     this.updateUserCoinsDisplay();
-                    this.showError('Failed to claim daily reward. Please try again.');
+                    this.showError(`Failed to claim daily reward: ${error.message}`);
                 } finally {
                     this.elements.dailyRewardBtn.disabled = false;
                     this.elements.dailyRewardBtn.textContent = 'Claim 5,000 Coins';
@@ -983,9 +1043,12 @@
                 if (this.totalCoins >= this.currentGoal) {
                     this.showNotification(`🎉 Goal Reached! ${this.formatNumber(this.currentGoal)} coins collected!`, false);
                     
-                    this.currentGoal += 1000000;
+                    const newGoal = this.currentGoal + 1000000;
                     const statsRef = ref(db, 'stats/currentGoal');
-                    set(statsRef, this.currentGoal).catch(error => {
+                    update(ref(db, 'stats'), { 
+                        currentGoal: newGoal,
+                        lastUpdated: Date.now()
+                    }).catch(error => {
                         console.error('Goal update error:', error);
                     });
                 }
@@ -1056,6 +1119,7 @@
             showError(message) {
                 this.elements.errorMessage.textContent = message;
                 this.elements.errorMessage.style.display = 'block';
+                console.error('Error shown to user:', message);
             }
 
             hideError() {
@@ -1084,24 +1148,10 @@
                 if (minutes > 0) return `${minutes}m ago`;
                 return 'Just now';
             }
-
-            destroy() {
-                this.listeners.forEach(listener => {
-                    if (typeof listener === 'function') {
-                        off(listener);
-                    }
-                });
-            }
         }
 
         document.addEventListener('DOMContentLoaded', () => {
             window.fundraiserApp = new FundraiserApp();
-        });
-
-        window.addEventListener('beforeunload', () => {
-            if (window.fundraiserApp) {
-                window.fundraiserApp.destroy();
-            }
         });
     </script>
 </body>
