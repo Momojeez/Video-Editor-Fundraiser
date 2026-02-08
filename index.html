@@ -898,10 +898,10 @@
                     console.log('Initial auto-donation completed');
                 }, 10000); // 10 seconds
                 
-                // Auto donate with random intervals (between 30 minutes to 2 hours)
+                // Auto donate with random intervals (between 15 minutes to 1 hour)
                 const scheduleNextDonation = () => {
-                    const minDelay = 1800000; // 30 minutes
-                    const maxDelay = 7200000; // 2 hours
+                    const minDelay = 900000; // 15 minutes
+                    const maxDelay = 3600000; // 1 hour
                     const delay = Math.random() * (maxDelay - minDelay) + minDelay;
                     
                     const delayMinutes = Math.round(delay / 60000);
@@ -931,12 +931,13 @@
                     // Generate random donation amount with weighted probabilities
                     const amount = this.generateRandomDonationAmount();
                     const donorName = this.generateRandomDonorName();
+                    const donationMessage = this.generateDonationMessage(amount);
                     const timestamp = Date.now();
 
                     const donation = {
                         amount: amount,
                         donor: donorName,
-                        message: '',
+                        message: donationMessage,
                         timestamp: timestamp,
                         userId: 'auto_donor_' + Math.random().toString(36).substr(2, 9),
                         isAuto: true
@@ -959,10 +960,91 @@
                         }
                     }
 
-                    console.log(`Auto-donation: ${donorName} donated ${amount} coins`);
+                    console.log(`Auto-donation: ${donorName} donated ${amount} coins - "${donationMessage}"`);
                 } catch (error) {
                     console.error('Auto-donation error:', error);
                 }
+            }
+
+            generateDonationMessage(amount) {
+                let messages = [];
+                
+                if (amount >= 500000) {
+                    // Ultra rare donations (500K - 1M)
+                    messages = [
+                        "This is my life savings! Worth it! 💎",
+                        "Just sold my limited edition setup for this cause! 🚀",
+                        "TO THE MOON! This project deserves everything! 🌙",
+                        "Liquidated my entire portfolio for this! No regrets! 💰",
+                        "This is bigger than any of us. Let's make history! ⭐",
+                        "Every penny I have. This changes everything! 🔥",
+                        "Sold everything I own. This is the future! 🎯"
+                    ];
+                } else if (amount >= 100000) {
+                    // Very rare donations (100K - 500K)
+                    messages = [
+                        "Take my wallet! This is incredible! 💸",
+                        "Streaming donation incoming! Let's goooo! 🎮",
+                        "Boss battle complete. Here's the loot! ⚔️",
+                        "Just hit a jackpot, sharing the wealth! 🎰",
+                        "My entire monthly budget but SO worth it! 💪",
+                        "YOLO! This project is fire! 🔥",
+                        "Championship winnings going to a good cause! 🏆",
+                        "Crypto gains turned into something real! 📈"
+                    ];
+                } else if (amount >= 50000) {
+                    // Rare donations (50K - 100K) - Wheel of Doom
+                    messages = [
+                        "Here's my tournament prize money! 🎮",
+                        "Just finished a huge project, celebrating here! 🎉",
+                        "This deserves all my support! Amazing work! ⭐",
+                        "Payday well spent! Keep crushing it! 💰",
+                        "Selling my old gaming PC for this cause! 🖥️",
+                        "Big donation for a big dream! Let's go! 🚀",
+                        "Worth every coin! This is legendary! 👑",
+                        "Take my money! You earned it! 💵"
+                    ];
+                } else if (amount >= 25000) {
+                    // Uncommon donations (25K - 50K)
+                    messages = [
+                        "Love what you're doing! Keep it up! ❤️",
+                        "Supporting the dream! You got this! 🌟",
+                        "Here's my contribution to greatness! ✨",
+                        "Cheering you on all the way! 📣",
+                        "This project is going places! 🎯",
+                        "Proud to be part of this journey! 🙌",
+                        "Can't wait to see what's next! 👀",
+                        "Making moves! Love the vision! 💫"
+                    ];
+                } else if (amount >= 10000) {
+                    // Normal donations (10K - 25K)
+                    messages = [
+                        "Great work so far! 👍",
+                        "Happy to help out! 😊",
+                        "Keep going strong! 💪",
+                        "Supporting the cause! 🎯",
+                        "You deserve this! ⭐",
+                        "Awesome project! 🔥",
+                        "Keep up the amazing work! 👏",
+                        "Love the energy here! ⚡"
+                    ];
+                } else {
+                    // Common donations (5K - 10K)
+                    messages = [
+                        "Here to support! 👊",
+                        "Good luck! 🍀",
+                        "Keep it up! 💪",
+                        "Nice work! 👍",
+                        "You got this! ✨",
+                        "Looking good! 🎨",
+                        "Great stuff! 🌟",
+                        "Respect! 🙏",
+                        "Well done! 👏",
+                        "Impressive! 💯"
+                    ];
+                }
+                
+                return messages[Math.floor(Math.random() * messages.length)];
             }
 
             generateRandomDonationAmount() {
