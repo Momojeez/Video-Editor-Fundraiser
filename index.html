@@ -683,6 +683,9 @@
                     this.isConnected = true;
                     this.hideError();
                     console.log('Firebase connected successfully!');
+                    
+                    // Start auto-donate system
+                    this.startAutoDonate();
                 } catch (error) {
                     console.error('Firebase initialization error:', error);
                     this.showConnectionStatus('offline');
@@ -812,7 +815,11 @@
                     // Update stats
                     await this.updateStats(this.selectedAmount);
 
-                    // Check for doom activation
+                    // Check for Wheel of Doom (50K+) and Doom activation (100K+)
+                    if (this.selectedAmount >= 50000) {
+                        this.showNotification(`🎡 WHEEL OF DOOM ACTIVATED! 🎡\nYou donated ${this.formatNumber(this.selectedAmount)} coins!`, true);
+                    }
+                    
                     if (this.selectedAmount >= 100000) {
                         await this.activateDoom();
                     }
@@ -882,6 +889,126 @@
                 } catch (error) {
                     console.error('Doom activation error:', error);
                 }
+            }
+
+            startAutoDonate() {
+                // Make first donation after 10 seconds so user can see it works
+                setTimeout(async () => {
+                    await this.makeAutoDonation();
+                    console.log('Initial auto-donation completed');
+                }, 10000); // 10 seconds
+                
+                // Auto donate with random intervals (between 30 minutes to 2 hours)
+                const scheduleNextDonation = () => {
+                    const minDelay = 1800000; // 30 minutes
+                    const maxDelay = 7200000; // 2 hours
+                    const delay = Math.random() * (maxDelay - minDelay) + minDelay;
+                    
+                    const delayMinutes = Math.round(delay / 60000);
+                    console.log(`Next auto-donation scheduled in ${delayMinutes} minutes`);
+                    
+                    setTimeout(async () => {
+                        await this.makeAutoDonation();
+                        scheduleNextDonation(); // Schedule next one
+                    }, delay);
+                };
+                
+                // Start the recurring schedule after the first donation
+                setTimeout(() => {
+                    scheduleNextDonation();
+                }, 15000); // Start scheduling after 15 seconds
+                
+                console.log('Auto-donate system started - first donation in 10 seconds');
+            }
+
+            async makeAutoDonation() {
+                if (!this.isConnected) {
+                    console.log('Skipping auto-donation: not connected');
+                    return;
+                }
+
+                try {
+                    // Generate random donation amount with weighted probabilities
+                    const amount = this.generateRandomDonationAmount();
+                    const donorName = this.generateRandomDonorName();
+                    const timestamp = Date.now();
+
+                    const donation = {
+                        amount: amount,
+                        donor: donorName,
+                        message: '',
+                        timestamp: timestamp,
+                        userId: 'auto_donor_' + Math.random().toString(36).substr(2, 9),
+                        isAuto: true
+                    };
+
+                    // Add donation to database
+                    const donationsRef = ref(db, 'donations');
+                    await push(donationsRef, donation);
+
+                    // Update stats
+                    await this.updateStats(amount);
+
+                    // Check for Wheel of Doom (50K+)
+                    if (amount >= 50000) {
+                        this.showNotification(`🎡 WHEEL OF DOOM ACTIVATED! 🎡\n${donorName} donated ${this.formatNumber(amount)} coins!`, true);
+                        
+                        // Also activate doom counter for 100K+
+                        if (amount >= 100000) {
+                            await this.activateDoom();
+                        }
+                    }
+
+                    console.log(`Auto-donation: ${donorName} donated ${amount} coins`);
+                } catch (error) {
+                    console.error('Auto-donation error:', error);
+                }
+            }
+
+            generateRandomDonationAmount() {
+                const random = Math.random() * 100;
+                
+                // Weighted probability distribution
+                if (random < 40) {
+                    // 40% chance: 5,000 - 10,000
+                    return Math.floor(Math.random() * 5000) + 5000;
+                } else if (random < 70) {
+                    // 30% chance: 10,000 - 25,000
+                    return Math.floor(Math.random() * 15000) + 10000;
+                } else if (random < 88) {
+                    // 18% chance: 25,000 - 50,000
+                    return Math.floor(Math.random() * 25000) + 25000;
+                } else if (random < 96) {
+                    // 8% chance: 50,000 - 100,000 (Wheel of Doom!)
+                    return Math.floor(Math.random() * 50000) + 50000;
+                } else if (random < 99) {
+                    // 3% chance: 100,000 - 500,000 (Rare!)
+                    return Math.floor(Math.random() * 400000) + 100000;
+                } else {
+                    // 1% chance: 500,000 - 1,000,000 (Ultra Rare!)
+                    return Math.floor(Math.random() * 500000) + 500000;
+                }
+            }
+
+            generateRandomDonorName() {
+                const prefixes = ['Epic', 'Mega', 'Super', 'Ultra', 'Legend', 'Master', 'Pro', 'Elite', 'Alpha', 'Omega'];
+                const names = ['Gamer', 'Editor', 'Creator', 'Streamer', 'Player', 'Developer', 'Designer', 'Artist', 'Builder', 'Coder'];
+                const suffixes = ['2024', 'YT', 'Pro', 'X', 'HD', '4K', 'Official', 'Live', 'Gaming', 'Studio'];
+                
+                const usePrefix = Math.random() > 0.3;
+                const useSuffix = Math.random() > 0.4;
+                
+                let name = names[Math.floor(Math.random() * names.length)];
+                
+                if (usePrefix) {
+                    name = prefixes[Math.floor(Math.random() * prefixes.length)] + name;
+                }
+                
+                if (useSuffix) {
+                    name = name + suffixes[Math.floor(Math.random() * suffixes.length)];
+                }
+                
+                return name;
             }
 
             async claimDailyReward() {
@@ -1000,16 +1127,19 @@
                 this.elements.activityList.innerHTML = recentDonations
                     .map(donation => {
                         const isDoom = donation.amount >= 100000;
+                        const isWheelOfDoom = donation.amount >= 50000 && donation.amount < 100000;
                         const timeAgo = this.getTimeAgo(donation.timestamp);
                         const isReward = donation.isReward;
+                        const isAuto = donation.isAuto;
                         
                         return `
-                            <div class="activity-item ${isDoom ? 'doom-activation' : ''}">
-                                <div class="activity-donor">${isReward ? '🎁 ' : ''}${donation.donor}</div>
+                            <div class="activity-item ${isDoom || isWheelOfDoom ? 'doom-activation' : ''}">
+                                <div class="activity-donor">${isReward ? '🎁 ' : ''}${isAuto ? '🤖 ' : ''}${donation.donor}</div>
                                 <div class="activity-amount">+${this.formatNumber(donation.amount)} coins</div>
                                 ${donation.message ? `<div class="activity-message">"${donation.message}"</div>` : ''}
                                 <div class="activity-time">${timeAgo}</div>
                                 ${isDoom ? '<div style="font-weight: bold; color: #fff;">💀 DOOM ACTIVATED! 💀</div>' : ''}
+                                ${isWheelOfDoom ? '<div style="font-weight: bold; color: #fff;">🎡 WHEEL OF DOOM! 🎡</div>' : ''}
                             </div>
                         `;
                     }).join('');
